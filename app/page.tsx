@@ -1,5 +1,6 @@
 'use client'
 
+import { track } from '@/lib/track'
 import { useState, useCallback, useRef } from 'react'
 import {
   Upload,
@@ -41,6 +42,10 @@ export default function PDFEmailExtractor() {
   const handleFile = useCallback(
     async (file: File) => {
       if (file.type !== 'application/pdf') {
+        track('upload_invalid_file_type', {
+          file_type: file.type || 'unknown',
+        })
+
         setError('Please upload a PDF file')
         toast({
           variant: 'destructive',
@@ -49,6 +54,11 @@ export default function PDFEmailExtractor() {
         })
         return
       }
+
+      track('extract_started', {
+        file_size_kb: Math.round(file.size / 1024),
+        file_name_length: file.name.length,
+      })
 
       setIsLoading(true)
       setError(null)
@@ -72,6 +82,11 @@ export default function PDFEmailExtractor() {
             data.error ||
             'An error occurred while processing the PDF. Please try again.'
 
+          track('extract_failed', {
+            reason: message,
+            status_code: response.status,
+          })
+
           setError(message)
           toast({
             variant: 'destructive',
@@ -85,17 +100,29 @@ export default function PDFEmailExtractor() {
         setEmails(uniqueEmails)
 
         if (uniqueEmails.length > 0) {
+          track('extract_success', {
+            email_count: uniqueEmails.length,
+          })
+
           toast({
             title: 'Extraction successful',
             description: getEmailCountLabel(uniqueEmails.length),
           })
         } else {
+          track('extract_empty', {
+            reason: 'no_emails_found',
+          })
+
           toast({
             title: 'No email addresses found',
             description: 'No email addresses were found in this PDF',
           })
         }
       } catch (err) {
+        track('extract_failed', {
+          reason: 'network_or_runtime_error',
+        })
+
         setError('An error occurred while processing the PDF. Please try again.')
         toast({
           variant: 'destructive',
@@ -116,6 +143,10 @@ export default function PDFEmailExtractor() {
 
       const file = e.dataTransfer.files[0]
       if (file) {
+        track('file_dropped', {
+          file_type: file.type || 'unknown',
+          file_size_kb: Math.round(file.size / 1024),
+        })
         handleFile(file)
       }
     },
@@ -136,6 +167,10 @@ export default function PDFEmailExtractor() {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
       if (file) {
+        track('file_selected', {
+          file_type: file.type || 'unknown',
+          file_size_kb: Math.round(file.size / 1024),
+        })
         handleFile(file)
       }
     },
@@ -144,8 +179,12 @@ export default function PDFEmailExtractor() {
 
   const copyAllEmails = useCallback(() => {
     if (emails.length === 0) return
-
+  
     navigator.clipboard.writeText(emails.join('\n'))
+    track('copy_all_emails', {
+      email_count: emails.length,
+    })
+  
     toast({
       title: 'Copied',
       description:
@@ -158,6 +197,7 @@ export default function PDFEmailExtractor() {
   const copySingleEmail = useCallback(
     (email: string) => {
       navigator.clipboard.writeText(email)
+      track('copy_single_email')
       toast({
         title: 'Copied',
         description: `${email} copied to clipboard`,
@@ -167,6 +207,7 @@ export default function PDFEmailExtractor() {
   )
 
   const reset = useCallback(() => {
+    track('extractor_reset')
     setEmails([])
     setError(null)
     setHasSearched(false)
@@ -201,11 +242,16 @@ export default function PDFEmailExtractor() {
             <div
               role="button"
               tabIndex={isLoading ? -1 : 0}
-              onClick={() => !isLoading && fileInputRef.current?.click()}
+              onClick={() => {
+                if (isLoading) return
+                track('upload_area_clicked', { source: 'dropzone' })
+                fileInputRef.current?.click()
+              }}
               onKeyDown={(e) => {
                 if (isLoading) return
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
+                  track('upload_area_clicked', { source: 'keyboard' })
                   fileInputRef.current?.click()
                 }
               }}
