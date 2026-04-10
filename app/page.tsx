@@ -9,18 +9,9 @@ import {
   RotateCcw,
   Mail,
   ShieldCheck,
-  Zap,
-  BadgeCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-  EmptyDescription,
-} from '@/components/ui/empty'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/hooks/use-toast'
 
@@ -30,6 +21,10 @@ export default function PDFEmailExtractor() {
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [submittingFeedback, setSubmittingFeedback] = useState(false)
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -173,18 +168,23 @@ export default function PDFEmailExtractor() {
         })
         handleFile(file)
       }
+
+      e.target.value = ''
     },
     [handleFile]
   )
 
   const copyAllEmails = useCallback(() => {
     if (emails.length === 0) return
-  
+
     navigator.clipboard.writeText(emails.join('\n'))
     track('copy_all_emails', {
       email_count: emails.length,
     })
-  
+
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+
     toast({
       title: 'Copied',
       description:
@@ -211,34 +211,43 @@ export default function PDFEmailExtractor() {
     setEmails([])
     setError(null)
     setHasSearched(false)
+    setShowFeedback(false)
+    setFeedback('')
   }, [])
+
+  const uploadAnotherPDF = useCallback(() => {
+    track('upload_another_pdf_clicked', {
+      source: emails.length > 0 ? 'results' : 'empty_result',
+    })
+  
+    reset()
+    fileInputRef.current?.click()
+  }, [emails.length, reset])
 
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        {/* Header */}
-        <section className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
-            <Mail className="w-8 h-8 text-primary" />
+        {/* Header + Upload */}
+        <section className="mb-12">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
+              <Mail className="w-9 h-9 text-primary" />
+            </div>
+
+            <h1 className="text-4xl font-bold mb-3 text-balance">
+              Instantly Extract Email Addresses from PDF
+            </h1>
+
+            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
+              Get a clean, copy-ready email list from any PDF file
+            </p>
+
+            <p className="mx-auto mt-5 mb-2 max-w-2xl text-sm text-muted-foreground text-center">
+              Example output: <span className="text-foreground">john@gmail.com · sales@company.com · hr@startup.io</span>
+            </p>
           </div>
 
-          <h1 className="text-4xl font-bold mb-3 text-balance">
-            Extract All Email Addresses from PDF in Seconds
-          </h1>
-
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Quickly extract all email addresses from PDF files
-          </p>
-
-          <p className="text-sm text-muted-foreground mt-3">
-            Works with many text-based PDFs, including resumes, reports, and
-            invoices
-          </p>
-        </section>
-
-        {/* Upload Area */}
-        <section className="mb-6">
-          <Card className="mb-6">
+          <Card>
             <div
               role="button"
               tabIndex={isLoading ? -1 : 0}
@@ -258,7 +267,7 @@ export default function PDFEmailExtractor() {
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
-              className={`group p-12 text-center border-2 border-dashed rounded-lg transition-colors cursor-pointer ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card'
+              className={`group rounded-xl border-2 border-dashed px-8 py-10 text-center transition-colors cursor-pointer ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card'
                 } ${isLoading ? 'cursor-not-allowed opacity-80' : ''}`}
             >
               <input
@@ -271,7 +280,7 @@ export default function PDFEmailExtractor() {
                 disabled={isLoading}
               />
 
-              <div className="flex flex-col items-center gap-4">
+              <div className="flex flex-col items-center gap-3">
                 {isLoading ? (
                   <>
                     <Spinner className="w-12 h-12" />
@@ -281,43 +290,39 @@ export default function PDFEmailExtractor() {
                   </>
                 ) : (
                   <>
-                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center transition-transform duration-200 group-hover:scale-105">
-                      <Upload className="w-8 h-8 text-muted-foreground" />
+                    <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center transition-transform duration-200 group-hover:scale-105">
+                      <Upload className="w-7 h-7 text-muted-foreground" />
                     </div>
 
-                    <p className="text-sm font-medium text-foreground mb-1">
-                      Extract emails from your PDF in seconds
+                    <p className="text-sm font-medium text-foreground">
+                      Upload your PDF to extract emails
                     </p>
 
-                    <div className="text-sm">
-                      <label
-                        htmlFor="file-upload"
-                        className="inline-flex items-center gap-2 text-primary font-medium cursor-pointer hover:underline"
+                    <div className="flex flex-col items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (isLoading) return
+                          track('upload_area_clicked', { source: 'button' })
+                          fileInputRef.current?.click()
+                        }}
+                        className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
                       >
-                        Click to upload
-                      </label>
-                      <span className="text-muted-foreground">
-                        {' '}
-                        or drag and drop your PDF here
-                      </span>
-                    </div>
+                        Upload PDF
+                      </button>
 
-                    <p className="text-xs text-muted-foreground">
-                      Best results for text-based PDFs. Scanned or image PDFs may
-                      not work perfectly.
-                    </p>
+                      <p className="text-sm text-muted-foreground">
+                        or drag and drop it here
+                      </p>
+                    </div>
                   </>
                 )}
               </div>
             </div>
           </Card>
 
-          {/* Trust Row */}
-          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground mb-4">
-            <div className="inline-flex items-center gap-2">
-              <BadgeCheck className="w-4 h-4" />
-              <span>Free</span>
-            </div>
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground mt-4">
             <div className="inline-flex items-center gap-2">
               <ShieldCheck className="w-4 h-4" />
               <span>No signup</span>
@@ -327,15 +332,9 @@ export default function PDFEmailExtractor() {
               <span>No file storage</span>
             </div>
             <div className="inline-flex items-center gap-2">
-              <Zap className="w-4 h-4" />
-              <span>Instant results</span>
+              <ShieldCheck className="w-4 h-4" />
+              <span>100% private</span>
             </div>
-          </div>
-
-          <div className="text-center mb-10">
-            <p className="text-sm text-muted-foreground">
-              Useful for resumes, reports, invoices, and other PDF documents
-            </p>
           </div>
         </section>
 
@@ -361,39 +360,130 @@ export default function PDFEmailExtractor() {
           )}
 
           {!error && emails.length === 0 && !isLoading && hasSearched && (
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Mail className="size-6" />
-                </EmptyMedia>
-                <EmptyTitle>No email addresses found</EmptyTitle>
-                <EmptyDescription>
-                  No email addresses were found in this PDF
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+            <Card className="p-6">
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                  <Mail className="size-5 text-muted-foreground" />
+                </div>
+
+                <h2 className="text-xl font-semibold mb-2">
+                  No email addresses found
+                </h2>
+
+                <p className="text-sm text-muted-foreground max-w-md">
+                  This PDF is likely scanned or image-based.
+                  Try uploading a text-based PDF for best results.
+                </p>
+
+                <p className="text-xs text-muted-foreground mt-2">
+                  OCR support is coming soon.
+                </p>
+
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={uploadAnotherPDF}
+                  >
+                    Upload another PDF
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      track('empty_feedback_clicked')
+                      setShowFeedback(true)
+                    }}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Didn’t work? Tell us
+                  </button>
+                  {showFeedback && (
+                    <div className="mt-4 w-full max-w-md">
+                      <textarea
+                        value={feedback}
+                        onChange={(e) => setFeedback(e.target.value)}
+                        placeholder="What went wrong? e.g. scanned PDF, email not detected"
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm resize-none"
+                        rows={4}
+                      />
+
+                      <Button
+                        className="mt-3 w-full"
+                        disabled={!feedback.trim() || submittingFeedback}
+                        onClick={async () => {
+                          try {
+                            setSubmittingFeedback(true)
+
+                            const res = await fetch('/api/feedback', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify({
+                                message: feedback,
+                                page: 'home',
+                                type: 'empty_result',
+                                project: 'pdf-email-extractor',
+                              }),
+                            })
+
+                            const data = await res.json()
+
+                            if (!res.ok || !data.ok) {
+                              throw new Error(data.error || 'Failed to submit')
+                            }
+
+                            track('feedback_submitted', { source: 'empty_result' })
+                            setFeedback('')
+                            setShowFeedback(false)
+
+                            toast({
+                              title: 'Thanks!',
+                              description: 'Your feedback helps us improve',
+                            })
+                          } catch (error) {
+                            toast({
+                              variant: 'destructive',
+                              title: 'Failed to send feedback',
+                              description: 'Please try again later.',
+                            })
+                          } finally {
+                            setSubmittingFeedback(false)
+                          }
+                        }}
+                      >
+                        {submittingFeedback ? 'Sending...' : 'Submit feedback'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
           )}
 
           {emails.length > 0 && (
             <Card className="p-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
+              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold mb-1">Emails extracted</h2>
                   <p className="text-sm text-muted-foreground">
-                    {getEmailCountLabel(emails.length)}
+                    {emails.length === 1
+                      ? '1 email found — click to copy'
+                      : `${emails.length} emails found — click to copy`}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={copyAllEmails} size="sm" className="gap-2">
+                  <Button onClick={copyAllEmails} size="default" className="gap-2 min-w-37">
                     <Copy className="w-4 h-4" />
-                    Copy all
+                    {copied ? 'Copied!' : 'Copy all emails'}
                   </Button>
+
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={reset}
-                    className="gap-2"
+                    className="gap-2 text-muted-foreground"
                   >
                     <RotateCcw className="w-4 h-4" />
                     Clear
@@ -401,13 +491,13 @@ export default function PDFEmailExtractor() {
                 </div>
               </div>
 
-              <div className="bg-muted rounded-lg p-4 max-h-96 overflow-y-auto">
+              <div className="rounded-lg border bg-muted/40 p-4 max-h-96 overflow-y-auto">
                 <ul className="space-y-2">
                   {emails.map((email, index) => (
                     <li
                       key={index}
                       onClick={() => copySingleEmail(email)}
-                      className="flex items-center gap-3 py-2 px-3 bg-background rounded-md cursor-pointer hover:bg-accent transition-colors"
+                      className="flex items-center gap-3 rounded-md border bg-background px-3 py-3 cursor-pointer transition-colors hover:bg-accent"
                       title="Click to copy"
                     >
                       <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -424,23 +514,23 @@ export default function PDFEmailExtractor() {
 
         <section className="mb-12 grid gap-4 md:grid-cols-3 text-sm">
           <Card className="p-4">
-            <p className="font-medium mb-1">Recruiters</p>
-            <p className="text-muted-foreground">
-              Extract emails from resumes in seconds
+            <p className="text-base font-semibold tracking-tight mb-1">Recruiters</p>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Extract emails from resumes instantly
             </p>
           </Card>
 
           <Card className="p-4">
-            <p className="font-medium mb-1">Sales & Outreach</p>
-            <p className="text-muted-foreground">
-              Pull leads from PDF contact lists
+            <p className="text-base font-semibold tracking-tight mb-1">Sales & Outreach</p>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Build email lists from PDFs
             </p>
           </Card>
 
           <Card className="p-4">
-            <p className="font-medium mb-1">Researchers</p>
-            <p className="text-muted-foreground">
-              Find author or contact emails in reports
+            <p className="text-base font-semibold tracking-tight mb-1">Researchers</p>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Find contact emails in reports
             </p>
           </Card>
         </section>
@@ -449,42 +539,37 @@ export default function PDFEmailExtractor() {
         <section className="grid gap-6 md:grid-cols-2 mb-12">
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-2">
-              What does this PDF email extractor do?
+              How does this PDF email extractor work?
             </h2>
             <p className="text-sm text-muted-foreground leading-6">
-              This tool scans a PDF file and extracts email addresses it can
-              detect, then shows them in a clean list you can copy instantly.
+              Upload a PDF and the tool scans it for email addresses, then shows all detected emails in a clean list you can copy instantly.
             </p>
           </Card>
 
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-2">
-              What kinds of PDF files work best?
+              What types of PDFs work best?
             </h2>
             <p className="text-sm text-muted-foreground leading-6">
-              It works best with standard text-based PDFs such as resumes,
-              reports, proposals, and invoices. Scanned or image-based PDFs may
-              return limited results.
+              This tool works best with text-based PDFs such as resumes, reports, proposals, and contact lists. Scanned or image-based files may need OCR support.
             </p>
           </Card>
 
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-2">
-              Is this tool free to use?
+              Is this PDF email extractor free?
             </h2>
             <p className="text-sm text-muted-foreground leading-6">
-              Yes. You can upload a PDF and extract email addresses without
-              creating an account.
+              Yes. You can extract email addresses from a PDF without creating an account or signing in.
             </p>
           </Card>
 
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-2">
-              When would I use this?
+              Why didn’t this PDF return any emails?
             </h2>
             <p className="text-sm text-muted-foreground leading-6">
-              It is useful for quickly finding contact emails in resumes,
-              business documents, reports, and other PDF files.
+              Some PDFs are scanned documents or image-based files with no selectable text. In those cases, this extractor may not detect any email addresses.
             </p>
           </Card>
         </section>
@@ -502,8 +587,7 @@ export default function PDFEmailExtractor() {
           </ol>
 
           <p className="mt-4">
-            This works best for text-based PDFs. If your file is scanned or
-            image-based, some email addresses may not be detected.
+            Best results come from text-based PDFs. If no emails are found, your file may be scanned, image-based, or simply not contain any email addresses.
           </p>
         </section>
 
@@ -511,22 +595,21 @@ export default function PDFEmailExtractor() {
         <footer className="border-t pt-8 pb-6 mt-12">
           <div className="max-w-5xl mx-auto px-4">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+
               <div className="text-center md:text-left">
-                <p className="font-medium text-foreground">PDF Email Extractor</p>
+                <p className="font-medium text-foreground">
+                  PDF Email Extractor
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  Extract email addresses from PDF files for free
+                  Simple, private email extraction from PDFs
                 </p>
               </div>
 
               <p className="text-sm text-muted-foreground text-center md:text-right">
                 © {new Date().getFullYear()} PDF Email Extractor
               </p>
-            </div>
 
-            <p className="text-xs text-muted-foreground mt-4 text-center leading-5 max-w-3xl mx-auto">
-              Useful for searches like PDF email extractor, extract emails from
-              PDF, find emails in PDF files, and PDF contact extractor.
-            </p>
+            </div>
           </div>
         </footer>
       </div>
