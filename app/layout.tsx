@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import Script from 'next/script'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
@@ -46,7 +47,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Google Analytics */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-J7GYHF9N3N"
           strategy="afterInteractive"
@@ -61,8 +61,50 @@ export default function RootLayout({
         </Script>
       </head>
 
-      <body className="font-sans antialiased">
-        {children}
+      <body className="font-sans antialiased text-neutral-900 bg-white">
+        <div className="min-h-screen flex flex-col">
+          <header className="border-b border-neutral-200">
+            <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+              <Link href="/" className="text-base font-semibold tracking-tight">
+                PDF Email Extractor
+              </Link>
+
+              <nav className="hidden gap-6 text-sm text-neutral-600 md:flex">
+                <Link href="/extract-emails-from-pdf" className="hover:text-neutral-900">
+                  Extract
+                </Link>
+                <Link href="/find-emails-in-pdf" className="hover:text-neutral-900">
+                  Find
+                </Link>
+                <Link href="/get-email-addresses-from-pdf" className="hover:text-neutral-900">
+                  Get
+                </Link>
+              </nav>
+            </div>
+          </header>
+
+          <main className="flex-1">
+            {children}
+          </main>
+
+          <footer className="mt-20 border-t border-neutral-200">
+            <div className="mx-auto max-w-5xl px-6 py-10">
+              <div className="flex flex-col gap-4 text-sm text-neutral-500 md:flex-row md:items-center md:justify-between">
+                <p>© 2026 PDF Email Extractor</p>
+
+                <div className="flex gap-4">
+                  <Link href="/privacy-policy" className="hover:text-neutral-900">
+                    Privacy Policy
+                  </Link>
+                  <Link href="/terms" className="hover:text-neutral-900">
+                    Terms
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </footer>
+        </div>
+
         <ToasterWrapper />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

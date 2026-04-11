@@ -1,0 +1,219 @@
+import Link from 'next/link'
+
+export const metadata = {
+  title: 'Extract Emails from PDF Online',
+  description:
+    'Extract email addresses from PDF files online. Upload your PDF in the browser and get visible email addresses in a clean, copy-ready list.',
+}
+
+export default function Page() {
+  return (
+    <main className="mx-auto max-w-5xl px-6 py-16">
+      {/* HERO */}
+      <section className="text-center">
+        <h1 className="text-4xl font-bold tracking-tight">
+          Extract Emails from PDF Online
+        </h1>
+        <p className="mt-4 text-lg text-neutral-600">
+          Extract visible email addresses from PDF files online in your browser.
+        </p>
+        <p className="mt-3 text-sm text-neutral-500">
+          No software installation. No signup. Best for text-based PDF files.
+        </p>
+
+        <Link
+          href="/#upload"
+          className="mt-10 block rounded-2xl border border-dashed border-neutral-300 p-10 text-center transition-colors hover:bg-neutral-50"
+        >
+          <p className="text-base font-medium">
+            Use the main tool to extract emails from your PDF online
+          </p>
+          <span className="mt-4 inline-flex rounded-lg bg-black px-5 py-3 text-white">
+            Go to PDF Email Extractor
+          </span>
+          <p className="mt-3 text-sm text-neutral-500">
+            Start in your browser without installing software
+          </p>
+        </Link>
+
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-sm text-neutral-500">
+          <span>Online in browser</span>
+          <span>No installation</span>
+          <span>100% private</span>
+        </div>
+      </section>
+
+      {/* USE CASES */}
+      <section className="mt-16 grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border p-6">
+          <h2 className="text-lg font-semibold">
+            Extract emails online from PDFs
+          </h2>
+          <p className="mt-2 text-sm text-neutral-600">
+            Pull visible email addresses from PDF files without downloading desktop software.
+          </p>
+        </div>
+        <div className="rounded-2xl border p-6">
+          <h2 className="text-lg font-semibold">
+            Use directly in your browser
+          </h2>
+          <p className="mt-2 text-sm text-neutral-600">
+            Review visible email addresses online in a browser-based workflow.
+          </p>
+        </div>
+        <div className="rounded-2xl border p-6">
+          <h2 className="text-lg font-semibold">
+            Avoid extra tools
+          </h2>
+          <p className="mt-2 text-sm text-neutral-600">
+            Get email addresses from PDF content without installing additional apps or utilities.
+          </p>
+        </div>
+      </section>
+
+      {/* INTENT BLOCK */}
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold">
+          Why use an online PDF email extractor?
+        </h2>
+        <p className="mt-4 text-neutral-700">
+          Many users want a fast browser-based way to extract email addresses from
+          PDF files without downloading software or setting up a larger document tool.
+          This page is built for quick online use when you need visible email addresses
+          from a text-based PDF.
+        </p>
+
+        <ul className="mt-6 space-y-2 text-neutral-700">
+          <li>• Extract visible email addresses online</li>
+          <li>• Avoid software downloads and installation</li>
+          <li>• Useful for resumes, reports, and contact documents</li>
+        </ul>
+      </section>
+
+      {/* LIMITATION BLOCK */}
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold">
+          Best results with text-based PDFs
+        </h2>
+        <p className="mt-4 text-neutral-700">
+          This online PDF email extraction workflow works best when the file contains selectable
+          text. If the PDF is scanned or image-based, visible email addresses may not
+          be detected unless OCR is applied first.
+        </p>
+      </section>
+
+      {/* PAGE-SPECIFIC BLOCK */}
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold">
+          Extract PDF emails online without installing software
+        </h2>
+        <p className="mt-4 text-neutral-700">
+          Use this page when you want to work in your browser, review visible
+          email addresses online, and avoid desktop tools or additional setup.
+          It is a lightweight option for users who prefer browser-first workflows.
+        </p>
+      </section>
+
+      {/* HOW TO */}
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold">
+          How to extract emails from PDF online
+        </h2>
+        <ol className="mt-6 space-y-3 text-neutral-700">
+          <li>1. Open the main PDF email extractor tool in your browser.</li>
+          <li>2. Upload your PDF file.</li>
+          <li>3. Review the extracted emails online.</li>
+          <li>4. Copy the result list for your next step.</li>
+        </ol>
+      </section>
+
+      {/* FAQ */}
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold">
+          Frequently asked questions
+        </h2>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border p-6">
+            <h3 className="font-semibold">
+              Can I extract emails from PDF online?
+            </h3>
+            <p className="mt-2 text-sm text-neutral-600">
+              Yes. Open the main tool in your browser and extract visible email
+              addresses from text-based PDF files online without creating an account.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border p-6">
+            <h3 className="font-semibold">
+              Do I need to install software?
+            </h3>
+            <p className="mt-2 text-sm text-neutral-600">
+              No. This workflow is designed for browser-based use, so you can upload
+              your PDF and review visible email addresses online.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border p-6">
+            <h3 className="font-semibold">
+              Does this online extractor work with scanned PDFs?
+            </h3>
+            <p className="mt-2 text-sm text-neutral-600">
+              Not always. Scanned or image-based PDFs may require OCR before
+              visible email addresses can be detected.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border p-6">
+            <h3 className="font-semibold">
+              What PDFs work best?
+            </h3>
+            <p className="mt-2 text-sm text-neutral-600">
+              Text-based PDFs such as resumes, reports, contact sheets, and
+              proposal documents usually produce the best results.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* RELATED PAGES */}
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold">Related pages</h2>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <Link href="/extract-emails-from-pdf" className="rounded-2xl border p-4 hover:bg-neutral-50">
+            <p className="font-semibold">Extract Emails from PDF</p>
+            <p className="mt-1 text-sm text-neutral-600">
+              Extract visible email addresses from text-based PDF files.
+            </p>
+          </Link>
+
+          <Link href="/extract-emails-from-pdf-free" className="rounded-2xl border p-4 hover:bg-neutral-50">
+            <p className="font-semibold">Extract Emails from PDF Free</p>
+            <p className="mt-1 text-sm text-neutral-600">
+              Extract visible email addresses from PDF files for free.
+            </p>
+          </Link>
+
+          <Link href="/extract-emails-from-scanned-pdf" className="rounded-2xl border p-4 hover:bg-neutral-50">
+            <p className="font-semibold">Extract Emails from Scanned PDF</p>
+            <p className="mt-1 text-sm text-neutral-600">
+              Learn how scanned files affect email extraction.
+            </p>
+          </Link>
+        </div>
+      </section>
+
+      {/* CLOSING SUMMARY */}
+      <section className="mt-16">
+        <h2 className="text-2xl font-bold">
+          Extract PDF email addresses online and faster
+        </h2>
+        <p className="mt-4 text-neutral-700">
+          Use this page to understand how online PDF email extraction works, then
+          start with the main tool in your browser to turn visible PDF email content
+          into a clean list you can copy right away.
+        </p>
+      </section>
+    </main>
+  )
+}
