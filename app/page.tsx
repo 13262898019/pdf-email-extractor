@@ -1,675 +1,470 @@
 'use client'
 
-import Link from 'next/link'
-import { track } from '@/lib/track'
-import { useState, useCallback, useRef } from 'react'
-import {
-  Upload,
-  FileText,
-  Copy,
-  RotateCcw,
-  Mail,
-  ShieldCheck,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Spinner } from '@/components/ui/spinner'
-import { useToast } from '@/hooks/use-toast'
+import { useRef, useState } from 'react'
+import { Zap, User, FileText, Copy, Loader2 } from 'lucide-react'
 
-export default function PDFEmailExtractor() {
+export default function HomePage() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
   const [emails, setEmails] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [showFeedback, setShowFeedback] = useState(false)
-  const [feedback, setFeedback] = useState('')
-  const [submittingFeedback, setSubmittingFeedback] = useState(false)
-  const { toast } = useToast()
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [selectedFileName, setSelectedFileName] = useState('')
 
-  const getEmailCountLabel = useCallback((count: number) => {
-    return count === 1
-      ? '1 email address — ready to copy'
-      : `${count} email addresses — ready to copy`
-  }, [])
+  const features = [
+    {
+      title: 'Fast extraction',
+      description: 'Scan visible PDF text and pull out email addresses in seconds.',
+      icon: Zap,
+    },
+    {
+      title: 'No signup',
+      description: 'Open the page, upload your file, and get results without creating an account.',
+      icon: User,
+    },
+  ]
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      if (file.type !== 'application/pdf') {
-        track('upload_invalid_file_type', {
-          file_type: file.type || 'unknown',
-        })
+  const steps = [
+    {
+      title: 'Upload your PDF',
+      description: 'Choose a PDF file from your device and start the extraction process.',
+    },
+    {
+      title: 'Extract email addresses',
+      description: 'The tool scans the visible text in your PDF and identifies email addresses.',
+    },
+    {
+      title: 'Copy the results',
+      description: 'Review the extracted emails and copy them into your CRM, spreadsheet, or notes.',
+    },
+  ]
 
-        setError('Please upload a PDF file')
-        toast({
-          variant: 'destructive',
-          title: 'Invalid file type',
-          description: 'Only PDF files are supported',
-        })
+  const faqs = [
+    {
+      question: 'Can I extract emails from scanned PDFs?',
+      answer:
+        'This tool works best for visible text PDFs. If your file is scanned or image-based, extraction may fail because there is no selectable text layer.',
+    },
+    {
+      question: 'Is this tool free to use?',
+      answer:
+        'Yes. You can upload a PDF and extract visible email addresses without creating an account.',
+    },
+    {
+      question: 'Will my file be stored?',
+      answer:
+        'Files are processed for extraction only. If you do not intentionally persist uploads on the server, they are not stored long-term.',
+    },
+  ]
+
+  const scrollToResults = () => {
+    const element = document.getElementById('results-anchor')
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const handleFile = async (file: File) => {
+    if (file.type !== 'application/pdf') {
+      setError('Only PDF files are supported.')
+      setEmails([])
+      setHasSearched(true)
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+    setEmails([])
+    setHasSearched(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/extract', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data: {
+        success?: boolean
+        emails?: string[]
+        count?: number
+        error?: string
+      } = await response.json()
+
+      if (!response.ok || data.success === false) {
+        setError(data.error || 'Failed to process this PDF.')
+        setEmails([])
         return
       }
 
-      track('extract_started', {
-        file_size_kb: Math.round(file.size / 1024),
-        file_name_length: file.name.length,
-      })
-
-      setIsLoading(true)
-      setError(null)
+      setEmails(data.emails || [])
+    } catch {
+      setError('An error occurred while processing the PDF. Please try again.')
       setEmails([])
-      setHasSearched(true)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-      try {
-        const formData = new FormData()
-        formData.append('file', file)
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setSelectedFileName(file.name)
+      scrollToResults()
+      await handleFile(file)
+    }
 
-        const response = await fetch('/api/extract', {
-          method: 'POST',
-          body: formData,
-        })
+    e.target.value = ''
+  }
 
-        const data: { emails?: string[]; success?: boolean; error?: string } =
-          await response.json()
-
-        if (!response.ok || data.success === false) {
-          const message =
-            data.error ||
-            'An error occurred while processing the PDF. Please try again.'
-
-          track('extract_failed', {
-            reason: message,
-            status_code: response.status,
-          })
-
-          setError(message)
-          toast({
-            variant: 'destructive',
-            title: 'Extraction failed',
-            description: message,
-          })
-          return
-        }
-
-        const uniqueEmails: string[] = Array.from(new Set(data.emails || []))
-        setEmails(uniqueEmails)
-
-        if (uniqueEmails.length > 0) {
-          track('extract_success', {
-            email_count: uniqueEmails.length,
-          })
-
-          toast({
-            title: 'Extraction successful',
-            description: getEmailCountLabel(uniqueEmails.length),
-          })
-        } else {
-          track('extract_empty', {
-            reason: 'no_emails_found',
-          })
-
-          toast({
-            title: 'No email addresses found',
-            description: 'No email addresses were found in this PDF',
-          })
-        }
-      } catch {
-        track('extract_failed', {
-          reason: 'network_or_runtime_error',
-        })
-
-        setError('An error occurred while processing the PDF. Please try again.')
-        toast({
-          variant: 'destructive',
-          title: 'Extraction failed',
-          description: 'Unable to extract email addresses from the PDF',
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [getEmailCountLabel, toast]
-  )
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault()
-      setIsDragging(false)
-
-      const file = e.dataTransfer.files[0]
-      if (file) {
-        track('file_dropped', {
-          file_type: file.type || 'unknown',
-          file_size_kb: Math.round(file.size / 1024),
-        })
-        handleFile(file)
-      }
-    },
-    [handleFile]
-  )
-
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragging(false)
-  }, [])
-
-  const handleFileInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (file) {
-        track('file_selected', {
-          file_type: file.type || 'unknown',
-          file_size_kb: Math.round(file.size / 1024),
-        })
-        handleFile(file)
-      }
-
-      e.target.value = ''
-    },
-    [handleFile]
-  )
-
-  const copyAllEmails = useCallback(() => {
+  const copyAllEmails = async () => {
     if (emails.length === 0) return
 
-    navigator.clipboard.writeText(emails.join('\n'))
-    track('copy_all_emails', {
-      email_count: emails.length,
-    })
-
+    await navigator.clipboard.writeText(emails.join('\n'))
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
-
-    toast({
-      title: 'Copied',
-      description:
-        emails.length === 1
-          ? '1 email address copied to clipboard'
-          : `${emails.length} email addresses copied to clipboard`,
-    })
-  }, [emails, toast])
-
-  const copySingleEmail = useCallback(
-    (email: string) => {
-      navigator.clipboard.writeText(email)
-      track('copy_single_email')
-      toast({
-        title: 'Copied',
-        description: `${email} copied to clipboard`,
-      })
-    },
-    [toast]
-  )
-
-  const reset = useCallback(() => {
-    track('extractor_reset')
-    setEmails([])
-    setError(null)
-    setHasSearched(false)
-    setShowFeedback(false)
-    setFeedback('')
-  }, [])
-
-  const uploadAnotherPDF = useCallback(() => {
-    track('upload_another_pdf_clicked', {
-      source: emails.length > 0 ? 'results' : 'empty_result',
-    })
-
-    reset()
-    fileInputRef.current?.click()
-  }, [emails.length, reset])
+  }
 
   return (
-    <div className="bg-background">
-      <div className="container mx-auto max-w-4xl px-4 py-12">
-        {/* Hero */}
-        <section className="mb-12">
-          <div className="mb-8 text-center">
-            <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-              <Mail className="h-9 w-9 text-primary" />
+    <main className="min-h-screen bg-white text-slate-900">
+      <section className="border-b border-slate-200 bg-linear-to-b from-slate-50 to-white">
+        <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 md:py-24">
+          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+            <div>
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 shadow-sm">
+                Free PDF Tool
+              </div>
+
+              <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 md:text-5xl">
+                Extract Emails from PDF
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
+                Extract visible email addresses from PDF files in seconds. Upload your file and get
+                clean, ready-to-copy results instantly.
+              </p>
+
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                Works best for text-based PDFs. If your file is scanned or image-based, see{' '}
+                <a
+                  href="/extract-emails-from-scanned-pdf"
+                  className="font-medium text-slate-700 underline underline-offset-4 hover:text-slate-900"
+                >
+                  how to extract emails from scanned PDFs
+                </a>
+                .
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-600">
+                <span className="rounded-full bg-slate-100 px-3 py-1">Extract emails in seconds</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">No signup required</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">Works for visible text PDFs</span>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+                >
+                  Upload PDF
+                </button>
+
+                <a
+                  href="#results-anchor"
+                  className="rounded-xl border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  View results
+                </a>
+              </div>
             </div>
 
-            <h1 className="mb-3 text-4xl font-bold text-balance">
-              PDF Email Extractor
-            </h1>
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div id="results-anchor" className="-translate-y-6" />
 
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-              Extract visible email addresses from PDF files into a clean, copy-ready list.
-            </p>
-
-            <p className="mx-auto mb-2 mt-5 max-w-2xl text-center text-sm text-muted-foreground">
-              Example output:{' '}
-              <span className="text-foreground">
-                john@gmail.com · sales@company.com · hr@startup.io
-              </span>
-            </p>
-          </div>
-
-          <Card>
-            <div
-              role="button"
-              tabIndex={isLoading ? -1 : 0}
-              onClick={() => {
-                if (isLoading) return
-                track('upload_area_clicked', { source: 'dropzone' })
-                fileInputRef.current?.click()
-              }}
-              onKeyDown={(e) => {
-                if (isLoading) return
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  track('upload_area_clicked', { source: 'keyboard' })
-                  fileInputRef.current?.click()
-                }
-              }}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              className={`group cursor-pointer rounded-xl border-2 border-dashed px-8 py-10 text-center transition-colors ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card'
-                } ${isLoading ? 'cursor-not-allowed opacity-80' : ''}`}
-            >
               <input
                 ref={fileInputRef}
                 type="file"
-                id="file-upload"
-                accept=".pdf"
+                accept="application/pdf"
                 onChange={handleFileInput}
                 className="hidden"
-                disabled={isLoading}
               />
 
-              <div className="flex flex-col items-center gap-3">
-                {isLoading ? (
-                  <>
-                    <Spinner className="h-12 w-12" />
-                    <p className="text-muted-foreground">
-                      Extracting email addresses...
+              <div
+                className="cursor-pointer rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center transition hover:border-slate-400"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
+                  <FileText className="h-6 w-6 text-slate-700" />
+                </div>
+
+                <h2 className="mt-4 text-lg font-semibold text-slate-900">
+                  {isLoading ? 'Processing your PDF...' : 'Upload a PDF to extract emails'}
+                </h2>
+
+                <p className="mt-2 text-sm text-slate-600">
+                  {isLoading
+                    ? selectedFileName || 'Please wait while we extract email addresses.'
+                    : 'Click to choose a PDF and extract visible email addresses instantly.'}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    fileInputRef.current?.click()
+                  }}
+                  className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  {isLoading ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing...
+                    </span>
+                  ) : (
+                    'Choose File'
+                  )}
+                </button>
+
+                <p className="mt-3 text-xs text-slate-500">Visible text PDFs supported</p>
+              </div>
+
+              <div
+                className={`mt-5 rounded-2xl border p-4 transition-all ${
+                  isLoading ? 'border-slate-400 bg-slate-50 shadow-md' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      {isLoading
+                        ? 'Extracting email addresses...'
+                        : error
+                          ? 'Extraction failed'
+                          : hasSearched
+                            ? emails.length > 0
+                              ? `Done — ${emails.length} email address${
+                                  emails.length === 1 ? '' : 'es'
+                                } found`
+                              : 'No email addresses found'
+                            : 'Results will appear here'}
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {selectedFileName ? `File: ${selectedFileName}` : 'Upload a PDF to start'}
                     </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted transition-transform duration-200 group-hover:scale-105">
-                      <Upload className="h-7 w-7 text-muted-foreground" />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={copyAllEmails}
+                    disabled={emails.length === 0}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Copy className="h-4 w-4" />
+                    {copied ? 'Copied!' : 'Copy emails'}
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {isLoading && (
+                    <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">
+                            Extracting email addresses...
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {selectedFileName
+                              ? `Processing ${selectedFileName}`
+                              : 'Processing your PDF'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
+                  )}
 
-                    <p className="text-sm font-medium text-foreground">
-                      Upload your PDF to extract emails
-                    </p>
+                  {!isLoading && error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+                      {error}
+                    </div>
+                  )}
 
-                    <div className="flex flex-col items-center gap-2">
-                      <Button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (isLoading) return
-                          track('upload_area_clicked', { source: 'button' })
-                          fileInputRef.current?.click()
-                        }}
+                  {!isLoading && !error && hasSearched && emails.length === 0 && (
+                    <div className="rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                      No email addresses found. This PDF may be scanned or image-based.{' '}
+                      <a
+                        href="/extract-emails-from-scanned-pdf"
+                        className="font-medium text-slate-700 underline underline-offset-4 hover:text-slate-900"
                       >
-                        Upload PDF
-                      </Button>
-
-                      <p className="text-sm text-muted-foreground">
-                        or drag and drop it here
-                      </p>
+                        Learn how to extract emails from scanned PDFs
+                      </a>
+                      .
                     </div>
-                  </>
-                )}
+                  )}
+
+                  {!isLoading &&
+                    !error &&
+                    emails.length > 0 &&
+                    emails.map((email) => (
+                      <div
+                        key={email}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                      >
+                        {email}
+                      </div>
+                    ))}
+
+                  {!hasSearched && !isLoading && (
+                    <>
+                      <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-400">
+                        john.smith@example.com
+                      </div>
+                      <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-400">
+                        hello@startuphub.io
+                      </div>
+                      <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-400">
+                        contact@agency.co
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </Card>
-
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
-            <div className="inline-flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4" />
-              <span>No signup</span>
-            </div>
-            <div className="inline-flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4" />
-              <span>No file storage</span>
-            </div>
-            <div className="inline-flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4" />
-              <span>100% private</span>
-            </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Results */}
-        {/* Results */}
-        {(error || (hasSearched && !isLoading)) && (
-          <section className="mb-12" aria-labelledby="results-heading">
-            <h2 id="results-heading" className="sr-only">
-              Extraction results
-            </h2>
-
-            {error && (
-              <Card className="border-destructive/50 bg-destructive/5 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10">
-                    <FileText className="h-5 w-5 text-destructive" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-destructive">
-                      Couldn&apos;t extract emails from this PDF
-                    </p>
-                    <p className="text-sm text-destructive/80">{error}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Tip: Works best with non-scanned, text-based PDFs
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {!error && emails.length === 0 && !isLoading && hasSearched && (
-              <Card className="p-6">
-                <div className="flex flex-col items-center text-center">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                    <Mail className="size-5 text-muted-foreground" />
-                  </div>
-
-                  <h2 className="mb-2 text-xl font-semibold">
-                    No email addresses found
-                  </h2>
-
-                  <p className="max-w-md text-sm text-muted-foreground">
-                    This PDF is likely scanned or image-based. Try uploading a
-                    text-based PDF for best results.
-                  </p>
-
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    OCR support is coming soon.
-                  </p>
-
-                  <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                    <Button variant="outline" onClick={uploadAnotherPDF}>
-                      Upload another PDF
-                    </Button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        track('empty_feedback_clicked')
-                        setShowFeedback(true)
-                      }}
-                      className="text-sm text-primary hover:underline"
-                    >
-                      Didn’t work? Tell us
-                    </button>
-
-                    {showFeedback && (
-                      <div className="mt-4 w-full max-w-md">
-                        <textarea
-                          value={feedback}
-                          onChange={(e) => setFeedback(e.target.value)}
-                          placeholder="What went wrong? e.g. scanned PDF, email not detected"
-                          className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm"
-                          rows={4}
-                        />
-
-                        <Button
-                          className="mt-3 w-full"
-                          disabled={!feedback.trim() || submittingFeedback}
-                          onClick={async () => {
-                            try {
-                              setSubmittingFeedback(true)
-
-                              const res = await fetch('/api/feedback', {
-                                method: 'POST',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                  message: feedback,
-                                  page: 'home',
-                                  type: 'empty_result',
-                                  project: 'pdf-email-extractor',
-                                }),
-                              })
-
-                              const data = await res.json()
-
-                              if (!res.ok || !data.ok) {
-                                throw new Error(data.error || 'Failed to submit')
-                              }
-
-                              track('feedback_submitted', { source: 'empty_result' })
-                              setFeedback('')
-                              setShowFeedback(false)
-
-                              toast({
-                                title: 'Thanks!',
-                                description: 'Your feedback helps us improve',
-                              })
-                            } catch {
-                              toast({
-                                variant: 'destructive',
-                                title: 'Failed to send feedback',
-                                description: 'Please try again later.',
-                              })
-                            } finally {
-                              setSubmittingFeedback(false)
-                            }
-                          }}
-                        >
-                          {submittingFeedback ? 'Sending...' : 'Submit feedback'}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {emails.length > 0 && (
-              <Card className="p-6">
-                <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2 className="mb-1 text-xl font-semibold">Emails extracted</h2>
-                    <p className="text-sm text-muted-foreground">
-                      {emails.length === 1
-                        ? '1 email found — click to copy'
-                        : `${emails.length} emails found — click to copy`}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={copyAllEmails} size="default" className="min-w-37 gap-2">
-                      <Copy className="h-4 w-4" />
-                      {copied ? 'Copied!' : 'Copy all emails'}
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={reset}
-                      className="gap-2 text-muted-foreground"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      Clear
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="max-h-96 overflow-y-auto rounded-lg border bg-muted/40 p-4">
-                  <ul className="space-y-2">
-                    {emails.map((email, index) => (
-                      <li
-                        key={index}
-                        onClick={() => copySingleEmail(email)}
-                        className="flex cursor-pointer items-center gap-3 rounded-md border bg-background px-3 py-3 transition-colors hover:bg-accent"
-                        title="Click to copy"
-                      >
-                        <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="flex-1 break-all font-mono text-sm">
-                          {email}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </Card>
-            )}
-          </section>
-        )}
-
-        {/* FAQ */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-2xl font-semibold text-foreground">
-            Frequently asked questions
-          </h2>
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="p-6">
-              <h3 className="mb-2 text-lg font-semibold">
-                How does this PDF email extractor work?
-              </h3>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Upload a PDF and the tool scans it for email addresses, then shows
-                all detected emails in a clean list you can copy instantly.
-              </p>
-            </Card>
-
-            <Card className="p-6">
-              <h3 className="mb-2 text-lg font-semibold">
-                What types of PDFs work best?
-              </h3>
-              <p className="text-sm leading-6 text-muted-foreground">
-                This tool works best with text-based PDFs such as resumes, reports,
-                proposals, and contact lists. Scanned or image-based files may need
-                OCR support.
-              </p>
-            </Card>
-
-            <Card className="p-6">
-              <h3 className="mb-2 text-lg font-semibold">
-                Is this PDF email extractor free?
-              </h3>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Yes. You can extract email addresses from a PDF without creating an
-                account or signing in.
-              </p>
-            </Card>
-
-            <Card className="p-6">
-              <h3 className="mb-2 text-lg font-semibold">
-                Why didn’t this PDF return any emails?
-              </h3>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Some PDFs are scanned documents or image-based files with no
-                selectable text. In those cases, this extractor may not detect any
-                email addresses.
-              </p>
-            </Card>
-          </div>
-        </section>
-
-        {/* How-to */}
-        <section className="mx-auto mb-10 max-w-3xl text-sm leading-7 text-muted-foreground">
-          <h2 className="mb-4 text-xl font-semibold text-foreground">
-            How to extract email addresses from a PDF
-          </h2>
-
-          <ol className="list-inside list-decimal space-y-3">
-            <li>Upload your PDF file.</li>
-            <li>Wait a few seconds while the tool scans the document.</li>
-            <li>Review the extracted email addresses.</li>
-            <li>Copy all results in one click.</li>
-          </ol>
-
-          <p className="mt-4">
-            Best results come from text-based PDFs. If no emails are found, your
-            file may be scanned, image-based, or simply not contain any email
-            addresses.
+      <section className="mx-auto max-w-6xl px-6 py-16 md:px-8">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+            How it works
           </p>
-        </section>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
+            Extract email addresses in 3 simple steps
+          </h2>
+        </div>
 
-        {/* SEO Hub */}
-        <section className="mb-10 pt-2">
-          <div className="mb-6 text-center">
-            <h2 className="text-xl font-semibold tracking-tight">
-              Explore More PDF Email Extraction Tools
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Compare related pages for scanned PDFs, free tools, online extraction, and more.
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          {steps.map((step, index) => (
+            <div
+              key={step.title}
+              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                {index + 1}
+              </div>
+              <h3 className="mt-4 text-lg font-semibold text-slate-900">{step.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-slate-50">
+        <div className="mx-auto max-w-6xl px-6 py-16 md:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+              Why use this tool
             </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
+              Built for quick PDF email extraction
+            </h2>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="p-4">
-              <Link href="/extract-emails-from-pdf" className="block">
-                <p className="mb-1 text-base font-semibold tracking-tight">
-                  Extract Emails from PDF
-                </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Extract visible emails from PDF files.
-                </p>
-              </Link>
-            </Card>
+          <div className="mt-12 grid gap-6 md:grid-cols-2">
+            {features.map((feature) => {
+              const Icon = feature.icon
 
-            <Card className="p-4">
-              <Link href="/find-emails-in-pdf" className="block">
-                <p className="mb-1 text-base font-semibold tracking-tight">
-                  Find Emails in PDF
-                </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Locate visible emails inside PDF documents.
-                </p>
-              </Link>
-            </Card>
+              return (
+                <div
+                  key={feature.title}
+                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100">
+                    <Icon className="h-5 w-5 text-slate-700" />
+                  </div>
 
-            <Card className="p-4">
-              <Link href="/get-email-addresses-from-pdf" className="block">
-                <p className="mb-1 text-base font-semibold tracking-tight">
-                  Get Email Addresses from PDF
-                </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Turn PDF emails into a copy-ready list.
-                </p>
-              </Link>
-            </Card>
+                  <h3 className="mt-4 text-lg font-semibold text-slate-900">{feature.title}</h3>
 
-            <Card className="p-4">
-              <Link href="/extract-emails-from-pdf-free" className="block">
-                <p className="mb-1 text-base font-semibold tracking-tight">
-                  Extract Emails from PDF Free
-                </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Extract PDF emails for free.
-                </p>
-              </Link>
-            </Card>
-
-            <Card className="p-4">
-              <Link href="/extract-emails-from-pdf-online" className="block">
-                <p className="mb-1 text-base font-semibold tracking-tight">
-                  Extract Emails from PDF Online
-                </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Extract PDF emails online in your browser.
-                </p>
-              </Link>
-            </Card>
-
-            <Card className="p-4">
-              <Link href="/extract-emails-from-scanned-pdf" className="block">
-                <p className="mb-1 text-base font-semibold tracking-tight">
-                  Extract Emails from Scanned PDF
-                </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Learn how OCR affects scanned PDFs.
-                </p>
-              </Link>
-            </Card>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{feature.description}</p>
+                </div>
+              )
+            })}
           </div>
-        </section>
-      </div>
-    </div>
+        </div>
+      </section>
+
+      <section className="bg-white">
+        <div className="mx-auto max-w-4xl px-6 py-16 md:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">FAQ</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
+              Frequently asked questions
+            </h2>
+          </div>
+
+          <div className="mt-12 space-y-4">
+            {faqs.map((faq) => (
+              <details
+                key={faq.question}
+                className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
+                  <span className="text-base font-semibold text-slate-900">{faq.question}</span>
+                  <span className="text-slate-400 transition group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-4 text-sm leading-6 text-slate-600">{faq.answer}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-4xl px-6 py-16 text-center md:px-8">
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900">
+            Ready to extract emails from your PDF?
+          </h2>
+          <p className="mt-4 text-slate-600">
+            Upload your file and pull out visible email addresses in a simpler, faster way.
+          </p>
+
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => {
+                fileInputRef.current?.click()
+              }}
+              className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              Upload PDF
+            </button>
+            <a
+              href="#results-anchor"
+              className="rounded-xl border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 hover:bg-white"
+            >
+              View results
+            </a>
+          </div>
+
+          <p className="mt-6 text-sm text-slate-500">
+            Need batch processing?{' '}
+            <a
+              href="/extract-emails-from-multiple-pdfs"
+              className="font-medium text-slate-700 underline underline-offset-4 hover:text-slate-900"
+            >
+              Extract emails from multiple PDFs
+            </a>
+            .
+          </p>
+        </div>
+      </section>
+    </main>
   )
 }

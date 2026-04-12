@@ -3,19 +3,18 @@
 import Link from 'next/link'
 import { useRef, useState } from 'react'
 import {
-  AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Copy,
-  FileImage,
-  FileSearch,
-  Image as ImageIcon,
+  FileStack,
+  FolderOpen,
   Loader2,
-  ScanSearch,
-  Search,
+  Mail,
+  RefreshCcw,
+  Wand2,
 } from 'lucide-react'
 
-export default function ExtractEmailsFromScannedPDFPage() {
+export default function ExtractEmailsFromMultiplePDFsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [emails, setEmails] = useState<string[]>([])
@@ -23,20 +22,24 @@ export default function ExtractEmailsFromScannedPDFPage() {
   const [error, setError] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [selectedFileName, setSelectedFileName] = useState('')
+  const [selectedFileNames, setSelectedFileNames] = useState<string[]>([])
+  const [processedFileCount, setProcessedFileCount] = useState(0)
 
   const scrollToResults = () => {
-    const element = document.getElementById('diagnosis-anchor')
+    const element = document.getElementById('bulk-results-anchor')
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
 
-  const handleFile = async (file: File) => {
-    if (file.type !== 'application/pdf') {
-      setError('Only PDF files are supported.')
+  const handleFiles = async (files: File[]) => {
+    const pdfFiles = files.filter((file) => file.type === 'application/pdf')
+
+    if (pdfFiles.length === 0) {
+      setError('Please upload one or more PDF files.')
       setEmails([])
       setHasSearched(true)
+      setProcessedFileCount(0)
       return
     }
 
@@ -44,32 +47,43 @@ export default function ExtractEmailsFromScannedPDFPage() {
     setError(null)
     setEmails([])
     setHasSearched(true)
+    setProcessedFileCount(pdfFiles.length)
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
+      const allEmails: string[] = []
 
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        body: formData,
-      })
+      for (const file of pdfFiles) {
+        const formData = new FormData()
+        formData.append('file', file)
 
-      const data: {
-        success?: boolean
-        emails?: string[]
-        count?: number
-        error?: string
-      } = await response.json()
+        const response = await fetch('/api/extract', {
+          method: 'POST',
+          body: formData,
+        })
 
-      if (!response.ok || data.success === false) {
-        setError(data.error || 'Failed to process this PDF.')
-        setEmails([])
-        return
+        const data: {
+          success?: boolean
+          emails?: string[]
+          count?: number
+          error?: string
+        } = await response.json()
+
+        if (response.ok && data.success !== false) {
+          allEmails.push(...(data.emails || []))
+        }
       }
 
-      setEmails(data.emails || [])
+      const uniqueEmails = Array.from(
+        new Set(allEmails.map((email) => email.trim().toLowerCase()))
+      ).sort()
+
+      setEmails(uniqueEmails)
+
+      if (uniqueEmails.length === 0) {
+        setError(null)
+      }
     } catch {
-      setError('An error occurred while processing the PDF. Please try again.')
+      setError('An error occurred while processing the PDF files. Please try again.')
       setEmails([])
     } finally {
       setIsLoading(false)
@@ -77,11 +91,11 @@ export default function ExtractEmailsFromScannedPDFPage() {
   }
 
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSelectedFileName(file.name)
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      setSelectedFileNames(files.map((file) => file.name))
       scrollToResults()
-      await handleFile(file)
+      await handleFiles(files)
     }
 
     e.target.value = ''
@@ -89,78 +103,94 @@ export default function ExtractEmailsFromScannedPDFPage() {
 
   const copyAllEmails = async () => {
     if (emails.length === 0) return
+
     await navigator.clipboard.writeText(emails.join('\n'))
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
   }
 
+  const reset = () => {
+    setEmails([])
+    setIsLoading(false)
+    setError(null)
+    setHasSearched(false)
+    setCopied(false)
+    setSelectedFileNames([])
+    setProcessedFileCount(0)
+  }
+
   const faqs = [
     {
-      question: 'Why does a scanned PDF often return no email addresses?',
+      question: 'Can I extract emails from multiple PDFs at once?',
       answer:
-        'Most scanned PDFs are image-based. If the file does not contain a selectable text layer, a normal PDF text extractor has nothing to read.',
+        'Yes. This page is designed for batch-style workflows where you want to pull email addresses from several PDF files and merge the results into one clean list.',
     },
     {
-      question: 'What is the difference between a scanned PDF and a text PDF?',
+      question: 'Will duplicate emails be removed?',
       answer:
-        'A text PDF contains machine-readable text that can usually be selected or copied. A scanned PDF may look readable, but is often stored as images.',
+        'Yes. Duplicate email addresses found across multiple PDF files are automatically deduplicated before the final list is shown.',
     },
     {
-      question: 'Can this page still find emails in some scanned PDFs?',
+      question: 'What kinds of PDFs work best in bulk mode?',
       answer:
-        'Yes. Some scanned PDFs already include OCR text in the background. In those cases, this checker may still detect extractable email addresses.',
+        'Text-based PDFs work best. If some files are scanned or image-based, they may return no results unless they already contain an OCR text layer.',
     },
     {
-      question: 'Do I need OCR for scanned PDFs?',
+      question: 'When would I use multiple PDF email extraction?',
       answer:
-        'In many cases, yes. OCR converts image-based text into machine-readable text so email extraction can work more reliably.',
+        'Typical use cases include resumes, lead lists, reports, business documents, vendor files, and folders of PDFs that need quick contact extraction.',
     },
   ]
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
-      <section className="border-b border-slate-200 bg-linear-to-b from-amber-50/40 to-white">
+      <section className="border-b border-slate-200 bg-linear-to-b from-sky-50/40 to-white">
         <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 md:py-24">
           <div className="grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
             <div>
-              <div className="inline-flex items-center rounded-full border border-amber-200 bg-white px-3 py-1 text-sm text-slate-700 shadow-sm">
-                Scanned PDF Diagnosis
+              <div className="inline-flex items-center rounded-full border border-sky-200 bg-white px-3 py-1 text-sm text-slate-700 shadow-sm">
+                Bulk PDF Workflow
               </div>
 
               <h1 className="mt-6 max-w-3xl text-4xl font-bold tracking-tight text-slate-900 md:text-5xl">
-                Why can’t you extract emails from a scanned PDF?
+                Extract Emails from Multiple PDFs
               </h1>
 
               <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-                Most scanned PDFs are image-based, which means they often do not
-                contain selectable text. This page helps you understand why email
-                extraction fails, when OCR is needed, and how to quickly test
-                whether your file contains readable text.
+                Need email addresses from more than one PDF file? This page is built for batch-style
+                workflows. Upload multiple PDFs, combine the extracted results, and get one
+                deduplicated email list ready to copy.
+              </p>
+
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
+                Best for text-based PDFs. If some files are scanned or image-based, you may also need
+                the{' '}
+                <Link
+                  href="/extract-emails-from-scanned-pdf"
+                  className="font-medium text-slate-700 underline underline-offset-4 hover:text-slate-900"
+                >
+                  scanned PDF guide
+                </Link>
+                .
               </p>
 
               <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-600">
-                <span className="rounded-full bg-slate-100 px-3 py-1">
-                  Diagnose scanned PDF issues
-                </span>
-                <span className="rounded-full bg-slate-100 px-3 py-1">
-                  Check for readable text
-                </span>
-                <span className="rounded-full bg-slate-100 px-3 py-1">
-                  OCR may be required
-                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">Batch-friendly workflow</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">Duplicate emails removed</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">Best for text-based PDFs</span>
               </div>
 
               <div className="mt-10 grid gap-4 sm:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-start gap-3">
-                    <FileImage className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
+                    <FileStack className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
                     <div>
                       <h2 className="text-base font-semibold text-slate-900">
-                        Scanned PDFs are often images
+                        Upload several PDFs
                       </h2>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
-                        A scanned PDF may look readable, but the page content is
-                        often stored as images instead of real text.
+                        Use this page when one file is not enough and you want to process a batch in
+                        one run.
                       </p>
                     </div>
                   </div>
@@ -168,14 +198,14 @@ export default function ExtractEmailsFromScannedPDFPage() {
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-start gap-3">
-                    <Search className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
+                    <FolderOpen className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
                     <div>
                       <h2 className="text-base font-semibold text-slate-900">
-                        No text layer means no extraction
+                        Merge extracted emails
                       </h2>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
-                        A standard email extractor reads machine-readable text.
-                        Without that text layer, it cannot reliably detect emails.
+                        Instead of separate file-by-file results, this page combines everything into
+                        one final list.
                       </p>
                     </div>
                   </div>
@@ -183,14 +213,14 @@ export default function ExtractEmailsFromScannedPDFPage() {
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-start gap-3">
-                    <ScanSearch className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
+                    <Wand2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" />
                     <div>
                       <h2 className="text-base font-semibold text-slate-900">
-                        OCR adds readable text
+                        Remove duplicates automatically
                       </h2>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
-                        OCR converts image-based pages into machine-readable text
-                        so extraction can work more reliably.
+                        Duplicate email addresses found across files are filtered out before the final
+                        result is shown.
                       </p>
                     </div>
                   </div>
@@ -203,25 +233,26 @@ export default function ExtractEmailsFromScannedPDFPage() {
                   onClick={() => fileInputRef.current?.click()}
                   className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
                 >
-                  Test a scanned PDF
+                  Upload multiple PDFs
                 </button>
 
                 <Link
                   href="/"
                   className="rounded-xl border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                 >
-                  Go to main PDF extractor
+                  Go to single PDF extractor
                 </Link>
               </div>
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div id="diagnosis-anchor" className="-translate-y-6" />
+              <div id="bulk-results-anchor" className="-translate-y-6" />
 
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf"
+                multiple
                 onChange={handleFileInput}
                 className="hidden"
               />
@@ -229,16 +260,16 @@ export default function ExtractEmailsFromScannedPDFPage() {
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6">
                 <div className="flex items-start gap-4">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm">
-                    <FileSearch className="h-5 w-5 text-slate-700" />
+                    <FileStack className="h-5 w-5 text-slate-700" />
                   </div>
 
                   <div className="min-w-0">
                     <h2 className="text-lg font-semibold text-slate-900">
-                      Check whether this PDF contains extractable text
+                      Merge email extraction results from several PDFs
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      This is a quick diagnostic check. It helps you see whether
-                      your scanned PDF already has readable text in the file.
+                      This is a bulk-style extractor for multi-file workflows. Select more than one
+                      PDF and combine all extracted email addresses into one list.
                     </p>
                   </div>
                 </div>
@@ -251,43 +282,45 @@ export default function ExtractEmailsFromScannedPDFPage() {
                   {isLoading ? (
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Running diagnosis...
+                      Processing files...
                     </span>
                   ) : (
-                    'Choose scanned PDF'
+                    'Choose multiple PDF files'
                   )}
                 </button>
 
                 <p className="mt-3 text-xs text-slate-500">
-                  Best used to test whether a scanned file already includes OCR text
+                  Best for small-to-medium batches of text-based PDFs
                 </p>
               </div>
 
               <div
                 className={`mt-5 rounded-2xl border p-4 transition-all ${
-                  isLoading
-                    ? 'border-amber-300 bg-amber-50/40 shadow-md'
-                    : 'border-slate-200 bg-white'
+                  isLoading ? 'border-sky-300 bg-sky-50/40 shadow-md' : 'border-slate-200 bg-white'
                 }`}
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900">
                       {isLoading
-                        ? 'Running scanned PDF diagnosis...'
+                        ? 'Processing multiple PDF files...'
                         : error
-                          ? 'Diagnosis failed'
+                          ? 'Batch extraction failed'
                           : hasSearched
                             ? emails.length > 0
-                              ? 'Readable text detected'
-                              : 'No readable email text detected'
-                            : 'Diagnosis results will appear here'}
+                              ? `Done — ${emails.length} unique email address${
+                                  emails.length === 1 ? '' : 'es'
+                                } found`
+                              : 'No email addresses found'
+                            : 'Batch results will appear here'}
                     </h3>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      {selectedFileName
-                        ? `File: ${selectedFileName}`
-                        : 'Upload a scanned PDF to begin'}
+                      {selectedFileNames.length > 0
+                        ? `${selectedFileNames.length} file${
+                            selectedFileNames.length === 1 ? '' : 's'
+                          } selected`
+                        : 'Upload multiple PDFs to begin'}
                     </p>
                   </div>
 
@@ -303,18 +336,43 @@ export default function ExtractEmailsFromScannedPDFPage() {
                 </div>
 
                 <div className="mt-4 space-y-3">
+                  {selectedFileNames.length > 0 && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Selected files
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {selectedFileNames.slice(0, 6).map((name) => (
+                          <div
+                            key={name}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                          >
+                            {name}
+                          </div>
+                        ))}
+                        {selectedFileNames.length > 6 && (
+                          <div className="text-xs text-slate-500">
+                            +{selectedFileNames.length - 6} more files
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {isLoading && (
                     <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
                       <div className="flex items-center gap-3">
                         <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
                         <div>
                           <p className="text-sm font-medium text-slate-900">
-                            Checking for text that can be extracted...
+                            Merging email extraction results...
                           </p>
                           <p className="text-xs text-slate-500">
-                            {selectedFileName
-                              ? `Processing ${selectedFileName}`
-                              : 'Processing your scanned PDF'}
+                            {processedFileCount > 0
+                              ? `Processing ${processedFileCount} PDF file${
+                                  processedFileCount === 1 ? '' : 's'
+                                }`
+                              : 'Processing your PDF files'}
                           </p>
                         </div>
                       </div>
@@ -328,27 +386,16 @@ export default function ExtractEmailsFromScannedPDFPage() {
                   )}
 
                   {!isLoading && !error && hasSearched && emails.length === 0 && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                        <div>
-                          <p className="text-sm font-medium text-amber-900">
-                            This file likely needs OCR
-                          </p>
-                          <p className="mt-1 text-sm leading-6 text-amber-800">
-                            No extractable email text was found. This usually
-                            means the PDF is image-based and does not contain a
-                            readable text layer.
-                          </p>
-                          <p className="mt-3 text-sm leading-6 text-amber-800">
-                            The usual next step is OCR, then retry the{' '}
-                            <Link href="/" className="font-medium underline underline-offset-4">
-                              main PDF extractor
-                            </Link>
-                            .
-                          </p>
-                        </div>
-                      </div>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                      No email addresses were found across the selected PDF files. One or more files
+                      may be scanned, image-based, or simply not contain visible email text. See the{' '}
+                      <Link
+                        href="/extract-emails-from-scanned-pdf"
+                        className="font-medium underline underline-offset-4"
+                      >
+                        scanned PDF guide
+                      </Link>{' '}
+                      if some of your files may need OCR first.
                     </div>
                   )}
 
@@ -358,19 +405,11 @@ export default function ExtractEmailsFromScannedPDFPage() {
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
                         <div>
                           <p className="text-sm font-medium text-emerald-900">
-                            This PDF appears to contain extractable text
+                            Batch extraction completed
                           </p>
                           <p className="mt-1 text-sm leading-6 text-emerald-800">
-                            Some readable content was detected, so email
-                            extraction can work on this file without needing a
-                            full OCR workflow.
-                          </p>
-                          <p className="mt-3 text-sm leading-6 text-emerald-800">
-                            You can now try the{' '}
-                            <Link href="/" className="font-medium underline underline-offset-4">
-                              main PDF email extractor
-                            </Link>
-                            .
+                            The final list below contains unique email addresses combined from all
+                            processed PDF files.
                           </p>
                         </div>
                       </div>
@@ -391,10 +430,32 @@ export default function ExtractEmailsFromScannedPDFPage() {
 
                   {!hasSearched && !isLoading && (
                     <div className="rounded-lg bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                      Upload a scanned PDF to check whether it already includes a readable text layer.
+                      Select several PDF files to generate one combined email list.
                     </div>
                   )}
                 </div>
+
+                {hasSearched && !isLoading && (
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <FileStack className="h-4 w-4" />
+                      Add more PDFs
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={reset}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <RefreshCcw className="h-4 w-4" />
+                      Clear results
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -404,10 +465,10 @@ export default function ExtractEmailsFromScannedPDFPage() {
       <section className="mx-auto max-w-6xl px-6 py-16 md:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-            How to tell if OCR is needed
+            How it works
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
-            Use this quick rule before trying email extraction again
+            Extract emails from several PDFs in one run
           </h2>
         </div>
 
@@ -415,30 +476,33 @@ export default function ExtractEmailsFromScannedPDFPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="text-sm font-semibold text-slate-500">Step 1</div>
             <h3 className="mt-3 text-lg font-semibold text-slate-900">
-              Try selecting text in the PDF
+              Select several PDFs
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              If you cannot highlight or copy any text, the file is probably image-based.
+              Choose multiple PDF files in one upload instead of repeating the single-file workflow
+              over and over.
             </p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="text-sm font-semibold text-slate-500">Step 2</div>
             <h3 className="mt-3 text-lg font-semibold text-slate-900">
-              Test the file on this page
+              Merge all extracted emails
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Some scanned PDFs already include hidden OCR text, so it is worth checking once.
+              The page combines all extracted addresses into one final result instead of showing
+              separate lists per file.
             </p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="text-sm font-semibold text-slate-500">Step 3</div>
             <h3 className="mt-3 text-lg font-semibold text-slate-900">
-              Use OCR if nothing is detected
+              Remove duplicates automatically
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              If no readable text is found, OCR is usually the next step before email extraction.
+              Duplicate email addresses found across multiple PDFs are filtered out so the final list
+              is cleaner and easier to use.
             </p>
           </div>
         </div>
@@ -449,31 +513,30 @@ export default function ExtractEmailsFromScannedPDFPage() {
           <div className="grid gap-12 lg:grid-cols-[1fr_1.1fr]">
             <div>
               <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-                When this page is useful
+                Common use cases
               </p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
-                This page is for failed extraction cases
+                Batch extraction is useful when one file is only part of the job
               </h2>
               <p className="mt-4 text-slate-600">
-                Use it when the main PDF extractor returns no results and you need
-                to understand whether the file is scanned, image-based, or missing
-                a readable text layer.
+                This page is a better fit when your workflow involves folders, batches, repeated
+                uploads, or repeated copy-paste steps that can be simplified into one combined run.
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               {[
-                'A scanned PDF returned no emails',
-                'The file came from a scanner or phone camera',
-                'You want to know whether OCR is required',
-                'The PDF looks readable but behaves like an image',
+                'Reviewing many resumes or CV PDFs',
+                'Collecting contact data from lead list PDFs',
+                'Combining emails from multiple reports or directories',
+                'Reducing repetitive upload-copy-upload workflows',
               ].map((item) => (
                 <div
                   key={item}
                   className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
                 >
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />
+                    <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />
                     <div className="text-sm font-medium text-slate-900">{item}</div>
                   </div>
                 </div>
@@ -486,11 +549,9 @@ export default function ExtractEmailsFromScannedPDFPage() {
       <section className="bg-white">
         <div className="mx-auto max-w-4xl px-6 py-16 md:px-8">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-              FAQ
-            </p>
+            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">FAQ</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
-              Frequently asked questions about scanned PDF email extraction
+              Frequently asked questions about extracting emails from multiple PDFs
             </h2>
           </div>
 
@@ -501,16 +562,10 @@ export default function ExtractEmailsFromScannedPDFPage() {
                 className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
-                  <span className="text-base font-semibold text-slate-900">
-                    {faq.question}
-                  </span>
-                  <span className="text-slate-400 transition group-open:rotate-45">
-                    +
-                  </span>
+                  <span className="text-base font-semibold text-slate-900">{faq.question}</span>
+                  <span className="text-slate-400 transition group-open:rotate-45">+</span>
                 </summary>
-                <p className="mt-4 text-sm leading-6 text-slate-600">
-                  {faq.answer}
-                </p>
+                <p className="mt-4 text-sm leading-6 text-slate-600">{faq.answer}</p>
               </details>
             ))}
           </div>
@@ -520,11 +575,11 @@ export default function ExtractEmailsFromScannedPDFPage() {
       <section className="border-t border-slate-200 bg-slate-50">
         <div className="mx-auto max-w-4xl px-6 py-16 text-center md:px-8">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900">
-            Need to diagnose a scanned PDF right now?
+            Need one combined email list from several PDFs?
           </h2>
           <p className="mt-4 text-slate-600">
-            Run a quick check to see whether your file already contains readable
-            text, or go back to the main extractor for normal text-based PDFs.
+            Start a batch run with multiple files, or go back to the main extractor for standard
+            single-PDF email extraction.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <button
@@ -532,7 +587,7 @@ export default function ExtractEmailsFromScannedPDFPage() {
               onClick={() => fileInputRef.current?.click()}
               className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-medium text-white hover:bg-slate-800"
             >
-              Diagnose scanned PDF
+              Start bulk extraction
             </button>
             <Link
               href="/"
