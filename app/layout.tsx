@@ -10,19 +10,36 @@ const geistSans = Geist({ subsets: ['latin'] })
 const geistMono = Geist_Mono({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://extractemailsfrompdf.com'),
   title: {
-    default: 'PDF Email Extractor',
+    default: 'Free PDF Email Extractor',
     template: '%s | PDF Email Extractor',
   },
   description:
-    'Extract visible email addresses from PDF files online. Free browser-based PDF email extractor with support for text-based PDFs, scanned PDF guidance, and multi-file workflows.',
+    'Extract visible email addresses from PDF files online. Fast browser-based PDF email extraction for text-based PDFs.',
   keywords: [
     'pdf email extractor',
     'extract emails from pdf',
     'extract email addresses from pdf',
-    'scanned pdf email extraction',
+    'text-based pdf email extraction',
     'extract emails from multiple pdfs',
+    'extract emails from scanned pdf',
   ],
+  alternates: {
+    canonical: '/',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    title: 'Free PDF Email Extractor',
+    description:
+      'Extract visible email addresses from PDF files online. Fast browser-based PDF email extraction for text-based PDFs.',
+    url: 'https://extractemailsfrompdf.com',
+    siteName: 'PDF Email Extractor',
+    type: 'website',
+  },
   icons: {
     icon: [
       {
@@ -65,7 +82,7 @@ export default function RootLayout({
       </head>
 
       <body className={`${geistSans.className} bg-white text-neutral-900 antialiased`}>
-        <div className="min-h-screen flex flex-col">
+        <div className="flex min-h-screen flex-col">
           <header className="border-b border-neutral-200 bg-white">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
               <Link href="/" className="text-base font-semibold tracking-tight text-neutral-900">
@@ -102,8 +119,8 @@ export default function RootLayout({
                     PDF Email Extractor
                   </div>
                   <p className="mt-3 max-w-sm text-sm leading-6 text-neutral-500">
-                    Extract visible email addresses from PDF files online. Built for
-                    text-based PDFs, scanned PDF diagnosis, and multi-file workflows.
+                    Extract visible email addresses from text-based PDF files online. Fast, simple,
+                    and built for clean copy-ready results.
                   </p>
                   <p className="mt-4 text-sm text-neutral-500">
                     Contact: support@extractemailsfrompdf.com
