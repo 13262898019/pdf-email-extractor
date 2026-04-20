@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import HomePageClient from '@/components/home-page-client'
 
 export const metadata: Metadata = {
-  title: 'Extract Emails from PDF - Free Online Tool',
+  title: 'Extract Emails from PDF - Free PDF Email Extractor',
   description:
-    'Extract emails from PDF files in seconds. Free online tool for fast, clean email extraction from text-based PDFs.',
+    'Extract email addresses from one or multiple PDF files online. Free PDF email extractor for fast, clean results from text-based PDFs.',
   alternates: {
     canonical: '/',
   },

@@ -1,7 +1,25 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Zap, User, FileText, Copy, Loader2, CheckCircle2, SearchX } from 'lucide-react'
+import {
+  Zap,
+  User,
+  FileText,
+  Copy,
+  Loader2,
+  CheckCircle2,
+  SearchX,
+  Files,
+} from 'lucide-react'
+
+type FileProcessStatus = 'pending' | 'processing' | 'success' | 'error'
+
+type FileResultItem = {
+  fileName: string
+  status: FileProcessStatus
+  emails: string[]
+  error?: string
+}
 
 export default function HomePageClient() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -11,7 +29,8 @@ export default function HomePageClient() {
   const [error, setError] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [selectedFileName, setSelectedFileName] = useState('')
+  const [selectedFileNames, setSelectedFileNames] = useState<string[]>([])
+  const [fileResults, setFileResults] = useState<FileResultItem[]>([])
 
   const features = [
     {
@@ -21,7 +40,7 @@ export default function HomePageClient() {
     },
     {
       title: 'No signup',
-      description: 'Open the page, upload your file, and get results without creating an account.',
+      description: 'Open the page, upload one or multiple PDF files, and get results without creating an account.',
       icon: User,
     },
     {
@@ -38,16 +57,16 @@ export default function HomePageClient() {
 
   const steps = [
     {
-      title: 'Upload your PDF',
-      description: 'Choose a PDF file from your device and start the extraction process.',
+      title: 'Upload one or multiple PDFs',
+      description: 'Choose one PDF or several PDF files from your device and start extraction.',
     },
     {
       title: 'Extract email addresses',
-      description: 'The tool scans the visible text in your PDF and identifies email addresses.',
+      description: 'The tool scans visible text in each PDF and collects detected email addresses.',
     },
     {
-      title: 'Copy the results',
-      description: 'Review the extracted emails and copy them into your CRM, spreadsheet, or notes.',
+      title: 'Copy merged results',
+      description: 'Review the combined results and copy clean emails into your CRM, spreadsheet, or notes.',
     },
   ]
 
@@ -61,8 +80,8 @@ export default function HomePageClient() {
       description: 'This tool is designed to find email addresses that appear clearly in the PDF content.',
     },
     {
-      title: 'Clean copy-ready output',
-      description: 'Results are shown in a simple list so you can copy and reuse them quickly.',
+      title: 'Single files and small batches',
+      description: 'Use the main extractor for one PDF or several files, then merge results in one place.',
     },
     {
       title: 'Quick checks before outreach',
@@ -96,14 +115,19 @@ export default function HomePageClient() {
         'This tool works best for visible text PDFs. If your file is scanned or image-based, extraction may fail because there is no selectable text layer.',
     },
     {
-      question: 'Is this tool free to use?',
+      question: 'Can I upload more than one PDF?',
       answer:
-        'Yes. You can upload a PDF and extract visible email addresses without creating an account.',
+        'Yes. You can upload one or multiple PDF files, and the tool will merge and deduplicate the extracted email addresses.',
     },
     {
-      question: 'Will my file be stored?',
+      question: 'Is this tool free to use?',
       answer:
-        'Files are processed for extraction only. If you do not intentionally persist uploads on the server, they are not stored long-term.',
+        'Yes. You can upload PDF files and extract visible email addresses without creating an account.',
+    },
+    {
+      question: 'Will my files be stored?',
+      answer:
+        'Your PDFs are processed only for extraction and are not stored as permanent uploads.',
     },
     {
       question: 'Why did no emails appear in the results?',
@@ -111,9 +135,9 @@ export default function HomePageClient() {
         'Usually this means the PDF is scanned, image-based, contains no visible email addresses, or has formatting that makes extraction harder.',
     },
     {
-      question: 'Can I extract emails from multiple PDFs?',
+      question: 'When should I check the scanned PDF guide?',
       answer:
-        'For batch workflows, use the multiple PDF page. It is a better fit when you need to process more than one file.',
+        'Use the scanned PDF guide when your file looks readable but no emails appear, or when you cannot highlight text inside the PDF.',
     },
   ]
 
@@ -124,11 +148,47 @@ export default function HomePageClient() {
     }
   }
 
-  const handleFile = async (file: File) => {
-    if (file.type !== 'application/pdf') {
+  const updateFileResult = (
+    fileName: string,
+    updater: (prev: FileResultItem) => FileResultItem
+  ) => {
+    setFileResults((prev) =>
+      prev.map((item) => (item.fileName === fileName ? updater(item) : item))
+    )
+  }
+
+  const processSingleFile = async (file: File): Promise<string[]> => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await fetch('/api/extract', {
+      method: 'POST',
+      body: formData,
+    })
+
+    const data: {
+      success?: boolean
+      emails?: string[]
+      count?: number
+      error?: string
+    } = await response.json()
+
+    if (!response.ok || data.success === false) {
+      throw new Error(data.error || 'Failed to process this PDF.')
+    }
+
+    return Array.isArray(data.emails) ? data.emails : []
+  }
+
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) return
+
+    const invalidFile = files.find((file) => file.type !== 'application/pdf')
+    if (invalidFile) {
       setError('Only PDF files are supported.')
       setEmails([])
       setHasSearched(true)
+      setFileResults([])
       return
     }
 
@@ -136,44 +196,73 @@ export default function HomePageClient() {
     setError(null)
     setEmails([])
     setHasSearched(true)
+    setCopied(false)
 
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
+    const initialResults: FileResultItem[] = files.map((file) => ({
+      fileName: file.name,
+      status: 'pending',
+      emails: [],
+    }))
 
-      const response = await fetch('/api/extract', {
-        method: 'POST',
-        body: formData,
-      })
+    setFileResults(initialResults)
 
-      const data: {
-        success?: boolean
-        emails?: string[]
-        count?: number
-        error?: string
-      } = await response.json()
+    const mergedEmails = new Set<string>()
+    let successCount = 0
+    let failedCount = 0
 
-      if (!response.ok || data.success === false) {
-        setError(data.error || 'Failed to process this PDF.')
-        setEmails([])
-        return
+    for (const file of files) {
+      updateFileResult(file.name, (prev) => ({
+        ...prev,
+        status: 'processing',
+      }))
+
+      try {
+        const extractedEmails = await processSingleFile(file)
+
+        extractedEmails.forEach((email) => mergedEmails.add(email))
+
+        updateFileResult(file.name, (prev) => ({
+          ...prev,
+          status: 'success',
+          emails: extractedEmails,
+        }))
+
+        successCount += 1
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'An error occurred while processing this PDF.'
+
+        updateFileResult(file.name, (prev) => ({
+          ...prev,
+          status: 'error',
+          emails: [],
+          error: message,
+        }))
+
+        failedCount += 1
       }
-
-      setEmails(data.emails || [])
-    } catch {
-      setError('An error occurred while processing the PDF. Please try again.')
-      setEmails([])
-    } finally {
-      setIsLoading(false)
     }
+
+    const finalEmails = Array.from(mergedEmails).sort((a, b) => a.localeCompare(b))
+    setEmails(finalEmails)
+
+    if (successCount === 0 && failedCount > 0) {
+      setError('All files failed to process. Please try again.')
+    } else if (failedCount > 0) {
+      setError(`${failedCount} file${failedCount === 1 ? '' : 's'} could not be processed.`)
+    } else {
+      setError(null)
+    }
+
+    setIsLoading(false)
   }
 
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSelectedFileName(file.name)
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      setSelectedFileNames(files.map((file) => file.name))
       scrollToResults()
-      await handleFile(file)
+      await handleFiles(files)
     }
 
     e.target.value = ''
@@ -186,6 +275,13 @@ export default function HomePageClient() {
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
   }
+
+  const selectedFileLabel =
+    selectedFileNames.length === 0
+      ? 'Upload a PDF to start'
+      : selectedFileNames.length === 1
+        ? `File: ${selectedFileNames[0]}`
+        : `${selectedFileNames.length} PDF files selected`
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
@@ -202,8 +298,7 @@ export default function HomePageClient() {
               </h1>
 
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-                Extract visible email addresses from PDF files in seconds. Upload your file and get
-                clean, ready-to-copy results instantly.
+                Find and extract email addresses from one or multiple PDF files online. Use the main PDF email extractor to get clean, ready-to-copy results in seconds.
               </p>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
@@ -218,7 +313,9 @@ export default function HomePageClient() {
               </p>
 
               <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-600">
-                <span className="rounded-full bg-slate-100 px-3 py-1">Extract emails in seconds</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1">
+                  Single and multiple PDFs
+                </span>
                 <span className="rounded-full bg-slate-100 px-3 py-1">No signup required</span>
                 <span className="rounded-full bg-slate-100 px-3 py-1">Works for visible text PDFs</span>
               </div>
@@ -229,7 +326,7 @@ export default function HomePageClient() {
                   onClick={() => fileInputRef.current?.click()}
                   className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
                 >
-                  Upload PDF
+                  Upload PDF files
                 </button>
 
                 <a
@@ -248,6 +345,7 @@ export default function HomePageClient() {
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf"
+                multiple
                 onChange={handleFileInput}
                 className="hidden"
               />
@@ -257,17 +355,19 @@ export default function HomePageClient() {
                 onClick={() => fileInputRef.current?.click()}
               >
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
-                  <FileText className="h-6 w-6 text-slate-700" />
+                  <Files className="h-6 w-6 text-slate-700" />
                 </div>
 
                 <h2 className="mt-4 text-lg font-semibold text-slate-900">
-                  {isLoading ? 'Processing your PDF...' : 'Upload a PDF to extract emails'}
+                  {isLoading ? 'Processing your PDFs...' : 'Upload one or multiple PDFs'}
                 </h2>
 
                 <p className="mt-2 text-sm text-slate-600">
                   {isLoading
-                    ? selectedFileName || 'Please wait while we extract email addresses.'
-                    : 'Click to choose a PDF and extract visible email addresses instantly.'}
+                    ? selectedFileNames.length > 1
+                      ? `Please wait while we process ${selectedFileNames.length} files.`
+                      : selectedFileNames[0] || 'Please wait while we extract email addresses.'
+                    : 'Click to choose one or more PDF files and extract visible email addresses instantly.'}
                 </p>
 
                 <button
@@ -284,7 +384,7 @@ export default function HomePageClient() {
                       Processing...
                     </span>
                   ) : (
-                    'Choose File'
+                    'Choose PDF files'
                   )}
                 </button>
 
@@ -292,29 +392,25 @@ export default function HomePageClient() {
               </div>
 
               <div
-                className={`mt-5 rounded-2xl border p-4 transition-all ${
-                  isLoading ? 'border-slate-400 bg-slate-50 shadow-md' : 'border-slate-200 bg-white'
-                }`}
+                className={`mt-5 rounded-2xl border p-4 transition-all ${isLoading ? 'border-slate-400 bg-slate-50 shadow-md' : 'border-slate-200 bg-white'
+                  }`}
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900">
                       {isLoading
                         ? 'Extracting email addresses...'
-                        : error
+                        : error && emails.length === 0
                           ? 'Extraction failed'
                           : hasSearched
                             ? emails.length > 0
-                              ? `Done — ${emails.length} email address${
-                                  emails.length === 1 ? '' : 'es'
-                                } found`
+                              ? `Done — ${emails.length} unique email address${emails.length === 1 ? '' : 'es'
+                              } found`
                               : 'No email addresses found'
                             : 'Results will appear here'}
                     </h3>
 
-                    <p className="mt-1 text-xs text-slate-500">
-                      {selectedFileName ? `File: ${selectedFileName}` : 'Upload a PDF to start'}
-                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{selectedFileLabel}</p>
                   </div>
 
                   <button
@@ -338,9 +434,11 @@ export default function HomePageClient() {
                             Extracting email addresses...
                           </p>
                           <p className="text-xs text-slate-500">
-                            {selectedFileName
-                              ? `Processing ${selectedFileName}`
-                              : 'Processing your PDF'}
+                            {selectedFileNames.length > 1
+                              ? `Processing ${selectedFileNames.length} PDF files`
+                              : selectedFileNames[0]
+                                ? `Processing ${selectedFileNames[0]}`
+                                : 'Processing your PDF'}
                           </p>
                         </div>
                       </div>
@@ -366,17 +464,18 @@ export default function HomePageClient() {
                     </div>
                   )}
 
-                  {!isLoading &&
-                    !error &&
-                    emails.length > 0 &&
-                    emails.map((email) => (
-                      <div
-                        key={email}
-                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                      >
-                        {email}
-                      </div>
-                    ))}
+                  {!isLoading && !error && emails.length > 0 && (
+                    <div className="space-y-2">
+                      {emails.map((email) => (
+                        <div
+                          key={email}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                        >
+                          {email}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {!hasSearched && !isLoading && (
                     <>
@@ -392,6 +491,48 @@ export default function HomePageClient() {
                     </>
                   )}
                 </div>
+
+                {fileResults.length > 0 && (
+                  <div className="mt-5 border-t border-slate-200 pt-4">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      File status
+                    </h4>
+
+                    <div className="mt-3 space-y-2">
+                      {fileResults.map((item) => (
+                        <div
+                          key={item.fileName}
+                          className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-slate-800">
+                              {item.fileName}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {item.status === 'pending' && 'Waiting to start'}
+                              {item.status === 'processing' && 'Processing...'}
+                              {item.status === 'success' &&
+                                `${item.emails.length} email${item.emails.length === 1 ? '' : 's'} found`}
+                              {item.status === 'error' && (item.error || 'Failed to process')}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0">
+                            {item.status === 'processing' && (
+                              <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
+                            )}
+                            {item.status === 'success' && (
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            )}
+                            {item.status === 'error' && (
+                              <SearchX className="h-4 w-4 text-red-600" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -565,7 +706,7 @@ export default function HomePageClient() {
             Ready to extract emails from your PDF?
           </h2>
           <p className="mt-4 text-slate-600">
-            Upload your file and pull out visible email addresses in a simpler, faster way.
+            Upload one or multiple PDF files and extract visible email addresses with the main PDF email extractor.
           </p>
 
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
@@ -576,7 +717,7 @@ export default function HomePageClient() {
               }}
               className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-medium text-white hover:bg-slate-800"
             >
-              Upload PDF
+              Upload PDF files
             </button>
             <a
               href="#results-anchor"
@@ -587,12 +728,12 @@ export default function HomePageClient() {
           </div>
 
           <p className="mt-6 text-sm text-slate-500">
-            Need batch processing?{' '}
+            Need help with scanned files?{' '}
             <a
-              href="/extract-emails-from-multiple-pdfs"
+              href="/extract-emails-from-scanned-pdf"
               className="font-medium text-slate-700 underline underline-offset-4 hover:text-slate-900"
             >
-              Extract emails from multiple PDFs
+              Learn how scanned PDF email extraction works
             </a>
             .
           </p>

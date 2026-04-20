@@ -1,45 +1,17 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import Script from 'next/script'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ToasterWrapper } from '@/components/toaster-wrapper'
 import './globals.css'
 
-const geistSans = Geist({ subsets: ['latin'] })
-const geistMono = Geist_Mono({ subsets: ['latin'] })
+const _geist = Geist({ subsets: ['latin'] })
+const _geistMono = Geist_Mono({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://extractemailsfrompdf.com'),
-  title: {
-    default: 'Free PDF Email Extractor',
-    template: '%s | PDF Email Extractor',
-  },
+  title: 'Extract Emails from PDF - Free PDF Email Extractor',
   description:
-    'Extract visible email addresses from PDF files online. Fast browser-based PDF email extraction for text-based PDFs.',
-  keywords: [
-    'pdf email extractor',
-    'extract emails from pdf',
-    'extract email addresses from pdf',
-    'text-based pdf email extraction',
-    'extract emails from multiple pdfs',
-    'extract emails from scanned pdf',
-  ],
-  alternates: {
-    canonical: '/',
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-  openGraph: {
-    title: 'Free PDF Email Extractor',
-    description:
-      'Extract visible email addresses from PDF files online. Fast browser-based PDF email extraction for text-based PDFs.',
-    url: 'https://extractemailsfrompdf.com',
-    siteName: 'PDF Email Extractor',
-    type: 'website',
-  },
+    'Extract email addresses from one or multiple PDF files online. Free PDF email extractor for fast, clean results from text-based PDFs.',
   icons: {
     icon: [
       {
@@ -50,43 +22,25 @@ export const metadata: Metadata = {
         url: '/icon-dark-32x32.png',
         media: '(prefers-color-scheme: dark)',
       },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
     ],
     apple: '/apple-icon.png',
+    shortcut: '/favicon.ico',
   },
 }
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode
-}) {
+}>) {
   return (
     <html lang="en">
-      <head>
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-J7GYHF9N3N"
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-J7GYHF9N3N');
-          `}
-        </Script>
-      </head>
-
-      <body className={`${geistSans.className} bg-white text-neutral-900 antialiased`}>
-        <div className="flex min-h-screen flex-col">
-          <header className="border-b border-neutral-200 bg-white">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <body className={`${_geist.className} ${_geistMono.className} antialiased`}>
+        <div className="min-h-screen bg-white text-neutral-900">
+          <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/90 backdrop-blur">
+            <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 md:px-8">
               <Link href="/" className="text-base font-semibold tracking-tight text-neutral-900">
-                PDF Email Extractor
+                Extract Emails from PDF
               </Link>
 
               <nav className="hidden items-center gap-6 text-sm text-neutral-600 md:flex">
@@ -97,38 +51,30 @@ export default function RootLayout({
                   href="/extract-emails-from-scanned-pdf"
                   className="hover:text-neutral-900"
                 >
-                  Scanned PDFs
-                </Link>
-                <Link
-                  href="/extract-emails-from-multiple-pdfs"
-                  className="hover:text-neutral-900"
-                >
-                  Multiple PDFs
+                  Scanned PDF Guide
                 </Link>
               </nav>
             </div>
           </header>
 
-          <main className="flex-1">{children}</main>
+          {children}
 
-          <footer className="mt-20 border-t border-neutral-200 bg-white">
-            <div className="mx-auto max-w-6xl px-6 py-10">
-              <div className="grid gap-8 md:grid-cols-3">
-                <div>
-                  <div className="text-sm font-semibold text-neutral-900">
-                    PDF Email Extractor
-                  </div>
-                  <p className="mt-3 max-w-sm text-sm leading-6 text-neutral-500">
-                    Extract visible email addresses from text-based PDF files online. Fast, simple,
-                    and built for clean copy-ready results.
-                  </p>
-                  <p className="mt-4 text-sm text-neutral-500">
-                    Contact: support@extractemailsfrompdf.com
+          <footer className="border-t border-neutral-200 bg-neutral-50">
+            <div className="mx-auto max-w-6xl px-6 py-12 md:px-8">
+              <div className="grid gap-10 md:grid-cols-4">
+                <div className="md:col-span-2">
+                  <Link href="/" className="text-base font-semibold tracking-tight text-neutral-900">
+                    Extract Emails from PDF
+                  </Link>
+                  <p className="mt-3 max-w-md text-sm leading-6 text-neutral-600">
+                    Extract visible email addresses from text-based PDF files. Use the
+                    main PDF email extractor for single files or small batches, and
+                    explore guides for scanned PDFs and related workflows.
                   </p>
                 </div>
 
                 <div>
-                  <div className="text-sm font-semibold text-neutral-900">Pages</div>
+                  <h3 className="text-sm font-semibold text-neutral-900">Pages</h3>
                   <div className="mt-3 flex flex-col gap-2 text-sm text-neutral-500">
                     <Link href="/" className="hover:text-neutral-900">
                       Main PDF extractor
@@ -143,33 +89,39 @@ export default function RootLayout({
                       href="/extract-emails-from-multiple-pdfs"
                       className="hover:text-neutral-900"
                     >
-                      Multiple PDF extractor
+                      Multiple PDF workflow
                     </Link>
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-sm font-semibold text-neutral-900">Legal</div>
+                  <h3 className="text-sm font-semibold text-neutral-900">Guides</h3>
                   <div className="mt-3 flex flex-col gap-2 text-sm text-neutral-500">
-                    <Link href="/privacy-policy" className="hover:text-neutral-900">
-                      Privacy Policy
+                    <Link href="/pdf-email-extractor" className="hover:text-neutral-900">
+                      PDF email extractor
                     </Link>
-                    <Link href="/terms" className="hover:text-neutral-900">
-                      Terms
+                    <Link href="/find-emails-in-pdf" className="hover:text-neutral-900">
+                      Find emails in PDF
+                    </Link>
+                    <Link
+                      href="/extract-email-addresses-from-pdf"
+                      className="hover:text-neutral-900"
+                    >
+                      Extract email addresses from PDF
                     </Link>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-10 border-t border-neutral-200 pt-6 text-sm text-neutral-500">
-                © 2026 PDF Email Extractor
+              <div className="mt-10 border-t border-neutral-200 pt-6 text-xs text-neutral-500">
+                © {new Date().getFullYear()} Extract Emails from PDF. All rights reserved.
               </div>
             </div>
           </footer>
         </div>
 
         <ToasterWrapper />
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        <Analytics />
       </body>
     </html>
   )
